@@ -7,6 +7,7 @@ import { FlightCard } from '@/components/flights/FlightCard'
 import { FlightCardSkeleton } from '@/components/ui/Skeleton'
 import { AirportSearch } from '@/components/search/AirportSearch'
 import { TravellerSelector, type TravellerConfig } from '@/components/search/TravellerSelector'
+import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
 import { formatCurrency } from '@/utils/formatters'
 
@@ -41,6 +42,17 @@ const TIME_SLOTS: { key: TimeSlot; label: string; sub: string; icon: string; ran
   { key: 'morning',   label: '6 am - 12 pm', sub: '6am - 12pm',  icon: '🌅', range: [6,  12] },
   { key: 'afternoon', label: '12 pm - 6 pm', sub: '12pm - 6pm',  icon: '☀️', range: [12, 18] },
   { key: 'night',     label: 'After 6 pm',   sub: '6pm - 11pm',  icon: '🌆', range: [18, 24] },
+type SortKey = 'price_asc' | 'price_desc' | 'duration_asc' | 'departure_asc' | 'arrival_asc'
+type TripType = 'oneway' | 'roundtrip'
+
+const TODAY = new Date().toISOString().split('T')[0]
+
+const SORT_OPTIONS = [
+  { value: 'price_asc',     label: 'Price: Low to High' },
+  { value: 'price_desc',    label: 'Price: High to Low' },
+  { value: 'duration_asc',  label: 'Duration: Shortest' },
+  { value: 'departure_asc', label: 'Departure: Earliest' },
+  { value: 'arrival_asc',   label: 'Arrival: Earliest' },
 ]
 
 const AIRLINE_COLORS: Record<string, string> = {
@@ -601,6 +613,20 @@ export default function FlightsPage() {
   const [fareType, setFareType] = useState('Regular')
 
   // Data
+  const [origin,        setOrigin]        = useState(searchParams.get('origin')        ?? '')
+  const [originCity,    setOriginCity]    = useState('')
+  const [destination,   setDestination]   = useState(searchParams.get('destination')   ?? '')
+  const [destinationCity, setDestinationCity] = useState('')
+  const [departureDate, setDepartureDate] = useState(searchParams.get('departureDate') ?? '')
+  const [returnDate,    setReturnDate]    = useState(searchParams.get('returnDate')    ?? '')
+  const [tripType,      setTripType]      = useState<TripType>(searchParams.get('returnDate') ? 'roundtrip' : 'oneway')
+  const [travellers,    setTravellers]    = useState<TravellerConfig>({
+    adults:     Number(searchParams.get('passengers') ?? 1),
+    children:   0,
+    infants:    0,
+    cabinClass: (searchParams.get('cabinClass') as TravellerConfig['cabinClass']) ?? 'Economy',
+  })
+
   const [flights,  setFlights]  = useState<FlightDto[]>([])
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState<string | null>(null)
@@ -608,6 +634,9 @@ export default function FlightsPage() {
   // Filters & sort
   const [filters,  setFilters]  = useState<Filters>(DEFAULT_FILTERS)
   const [sortKey,  setSortKey]  = useState<SortKey>('cheapest')
+  const [maxPrice, setMaxPrice] = useState<number>(0)
+  const [airline,  setAirline]  = useState('')
+  const [sort,     setSort]     = useState<SortKey>('price_asc')
 
   // Date bar prices
   const [datePriceMap, setDatePriceMap] = useState<Record<string, number | null>>({})
@@ -635,11 +664,22 @@ export default function FlightsPage() {
     const total = travellers.adults + travellers.children + travellers.infants
     try {
       const res = await flightService.search({ origin: src, destination: dst, departureDate: date, passengers: total, cabinClass: travellers.cabinClass, pageSize: 100 })
+    const total = travellers.adults + travellers.children + travellers.infants
+    try {
+      const res = await flightService.search({
+        origin,
+        destination,
+        departureDate,
+        passengers: total,
+        cabinClass: travellers.cabinClass,
+        pageSize: 50,
+      })
       setFlights(res.data ?? [])
       // Seed current date price into the map
       if (res.data?.length) {
         const minP = Math.min(...res.data.map(f => f.price))
         setDatePriceMap(p => ({ ...p, [date]: minP }))
+        setMaxPrice(Math.max(...res.data.map(f => f.price)))
       }
     } catch {
       setError('Failed to fetch flights. Please check your connection and try again.')
@@ -668,6 +708,21 @@ export default function FlightsPage() {
         setDatePriceMap(prev => ({ ...prev, [d]: p }))
       } catch {
         setDatePriceMap(prev => ({ ...prev, [d]: null }))
+  const airlines = useMemo(() => [...new Set(flights.map(f => f.airline))], [flights])
+  const maxPriceCap = useMemo(() => flights.length ? Math.max(...flights.map(f => f.price)) : 100000, [flights])
+
+  const filtered = useMemo(() => {
+    let list = [...flights]
+    if (airline)  list = list.filter(f => f.airline === airline)
+    if (maxPrice) list = list.filter(f => f.price <= maxPrice)
+    list.sort((a, b) => {
+      switch (sort) {
+        case 'price_asc':     return a.price - b.price
+        case 'price_desc':    return b.price - a.price
+        case 'duration_asc':  return a.durationMinutes - b.durationMinutes
+        case 'departure_asc': return new Date(a.departureTime).getTime() - new Date(b.departureTime).getTime()
+        case 'arrival_asc':   return new Date(a.arrivalTime).getTime() - new Date(b.arrivalTime).getTime()
+        default:              return 0
       }
     })
   }, [origin, destination, departureDate]) // eslint-disable-line
@@ -754,168 +809,140 @@ export default function FlightsPage() {
             <div className="flex-1 min-w-[150px]">
               <AirportSearch
                 label="FROM"
+    fetchFlights()
+  }
+
+  const swap = () => {
+    setOrigin(destination); setOriginCity(destinationCity)
+    setDestination(origin); setDestinationCity(originCity)
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Search bar */}
+      <div className="bg-blue-800 py-5 px-4 shadow-md">
+        {/* Trip type */}
+        <div className="mx-auto max-w-6xl mb-3 flex gap-4">
+          {(['oneway', 'roundtrip'] as TripType[]).map(t => (
+            <label key={t} className="flex items-center gap-1.5 text-xs font-semibold text-white cursor-pointer capitalize">
+              <input type="radio" name="tripType" value={t} checked={tripType === t} onChange={() => setTripType(t)} className="accent-white" />
+              {t === 'oneway' ? 'One Way' : 'Round Trip'}
+            </label>
+          ))}
+        </div>
+
+        <form onSubmit={handleSearch} className="mx-auto max-w-6xl">
+          <div className="bg-white rounded-xl p-3 flex flex-wrap gap-2 items-end">
+            <div className="flex-1 min-w-[150px]">
+              <AirportSearch
+                label="From"
                 value={origin ? `${originCity || origin} (${origin})` : ''}
                 onChange={(code, city) => { setOrigin(code); setOriginCity(city) }}
               />
             </div>
-            <button type="button" onClick={swap} className="mb-1 p-1.5 rounded-full border border-gray-200 hover:border-orange-400 transition-colors">
+            <button type="button" onClick={swap} className="mb-1 p-1.5 rounded-full border border-gray-200 hover:border-blue-400 transition-colors">
               <ArrowLeftRight className="h-3.5 w-3.5 text-gray-400" />
             </button>
             <div className="flex-1 min-w-[150px]">
               <AirportSearch
-                label="TO"
+                label="To"
                 value={destination ? `${destinationCity || destination} (${destination})` : ''}
                 onChange={(code, city) => { setDestination(code); setDestinationCity(city) }}
               />
             </div>
-
-            {/* Date with calendar picker */}
-            <div className="min-w-[140px] relative" ref={calRef}>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">DEPART</label>
-              <button
-                type="button"
-                onClick={() => setShowCal(p => !p)}
-                className="w-full text-left text-sm font-semibold text-gray-900 border-b-2 border-gray-300 focus:border-orange-500 pb-1 bg-transparent"
-              >
-                {departureDate
-                  ? new Date(departureDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', weekday: 'short' })
-                  : 'Select date'}
-              </button>
-              {showCal && (
-                <CalendarPicker
-                  value={departureDate}
-                  onSelect={handleDateSelect}
-                  onClose={() => setShowCal(false)}
-                  priceMap={datePriceMap}
-                />
-              )}
+            <div className="min-w-[130px]">
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Departure</label>
+              <input
+                type="date"
+                value={departureDate}
+                min={TODAY}
+                onChange={e => setDepartureDate(e.target.value)}
+                className="w-full text-sm font-medium text-gray-900 border-b-2 border-gray-300 focus:border-blue-600 focus:outline-none pb-1 bg-transparent"
+              />
             </div>
-
             {tripType === 'roundtrip' && (
               <div className="min-w-[130px]">
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">RETURN</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Return</label>
                 <input
                   type="date"
                   value={returnDate}
                   min={departureDate || TODAY}
                   onChange={e => setReturnDate(e.target.value)}
-                  className="w-full text-sm font-semibold text-gray-900 border-b-2 border-gray-300 focus:border-orange-500 focus:outline-none pb-1 bg-transparent"
+                  className="w-full text-sm font-medium text-gray-900 border-b-2 border-gray-300 focus:border-blue-600 focus:outline-none pb-1 bg-transparent"
                 />
               </div>
             )}
-
             <div className="min-w-[200px]">
               <TravellerSelector value={travellers} onChange={setTravellers} />
             </div>
-            <Button type="submit" loading={loading} className="shrink-0 bg-orange-500 hover:bg-orange-600 border-0 text-white font-bold px-6">
-              <Search className="h-4 w-4" /> SEARCH
+            <Button type="submit" variant="secondary" loading={loading} className="shrink-0">
+              <Search className="h-4 w-4" /> Search
             </Button>
           </div>
         </form>
-
-        {/* Fare type */}
-        <div className="mx-auto max-w-6xl px-4 pb-0">
-          <div className="flex items-center gap-1 py-2 overflow-x-auto scrollbar-hide">
-            <span className="text-xs font-semibold text-white mr-2 whitespace-nowrap flex-shrink-0">Fare Type:</span>
-            {FARE_TYPES.map(ft => (
-              <label
-                key={ft}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer whitespace-nowrap flex-shrink-0 transition-all ${
-                  fareType === ft
-                    ? 'bg-white text-orange-600'
-                    : 'border border-white/40 text-white hover:bg-white/10'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="fareType"
-                  checked={fareType === ft}
-                  onChange={() => setFareType(ft)}
-                  className="hidden"
-                />
-                <div className={`w-3 h-3 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                  fareType === ft ? 'border-orange-500' : 'border-white/60'
-                }`}>
-                  {fareType === ft && <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />}
-                </div>
-                {ft}
-              </label>
-            ))}
-          </div>
-        </div>
       </div>
 
-      {/* ── Date Bar ── */}
-      {departureDate && (
-        <DateBar
-          baseDate={departureDate}
-          onSelect={handleDateSelect}
-          priceMap={datePriceMap}
-        />
-      )}
-
-      {/* ── Main Content ── */}
       <div className="mx-auto max-w-6xl px-4 py-4">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1 text-xs text-gray-400 mb-4">
-          <Link to="/" className="hover:text-orange-500 flex items-center gap-1"><Home className="h-3 w-3" /> Home</Link>
+          <Link to="/" className="hover:text-blue-600 flex items-center gap-1"><Home className="h-3 w-3" /> Home</Link>
           <ChevronRight className="h-3 w-3" />
           <span>Flights</span>
           {origin && destination && (
-            <>
-              <ChevronRight className="h-3 w-3" />
-              <span className="text-gray-600 font-medium">
-                Flights from {originCity || origin} to {destinationCity || destination}
-              </span>
-            </>
+            <><ChevronRight className="h-3 w-3" /><span className="text-gray-600 font-medium">{origin} → {destination}</span></>
           )}
         </nav>
 
-        {/* Heading */}
-        {origin && destination && !loading && (
-          <h1 className="text-lg font-bold text-gray-800 mb-4">
-            Flights from {originCity || origin} to {destinationCity || destination}
-          </h1>
-        )}
-
         <div className="flex gap-5">
-          {/* Sidebar */}
-          <FilterSidebar
-            flights={flights}
-            filters={filters}
-            setFilters={setFilters}
-            origin={origin}
-            destination={destination}
-          />
+          {/* Filters sidebar */}
+          <aside className="hidden lg:block w-56 flex-shrink-0">
+            <div className="rounded-xl bg-white border border-gray-100 shadow-sm p-5 sticky top-20">
+              <h2 className="flex items-center gap-2 font-semibold text-gray-800 mb-4 text-sm">
+                <SlidersHorizontal className="h-4 w-4" /> Filters
+              </h2>
+              <div className="flex flex-col gap-4">
+                {airlines.length > 0 && (
+                  <Select
+                    label="Airline"
+                    value={airline}
+                    onChange={e => setAirline(e.target.value)}
+                    options={[{ value: '', label: 'All Airlines' }, ...airlines.map(a => ({ value: a, label: a }))]}
+                  />
+                )}
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Max Price</label>
+                  <p className="text-xs text-gray-400 mb-1">
+                    ₹{(maxPrice || maxPriceCap).toLocaleString('en-IN')}
+                  </p>
+                  <input
+                    type="range"
+                    min={0}
+                    max={maxPriceCap}
+                    step={500}
+                    value={maxPrice || maxPriceCap}
+                    onChange={e => setMaxPrice(Number(e.target.value))}
+                    className="w-full accent-blue-600"
+                  />
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => { setAirline(''); setMaxPrice(0) }}>
+                  Clear Filters
+                </Button>
+              </div>
+            </div>
+          </aside>
 
           {/* Results */}
           <div className="flex-1 min-w-0">
-            {/* Sort tabs */}
-            {!loading && flights.length > 0 && (
-              <SortTabs sortKey={sortKey} onSort={setSortKey} flights={flights} />
-            )}
-
-            {/* Count + sorted label */}
             <div className="flex items-center justify-between mb-3">
               <p className="text-sm text-gray-500">
-                {loading
-                  ? 'Searching for best flights…'
-                  : `${filtered.length} flight${filtered.length !== 1 ? 's' : ''} found`
-                }
-                {!loading && flights.length > 0 && (
-                  <span className="ml-2 text-gray-400">
-                    · Sorted by {sortKey === 'cheapest' ? 'Lowest fares' : sortKey === 'nonstop' ? 'Non-stop first' : sortKey === 'prefer' ? 'Recommended' : 'Earliest departure'}
-                  </span>
-                )}
+                {loading ? 'Searching...' : `${filtered.length} flight${filtered.length !== 1 ? 's' : ''} found`}
               </p>
-              {!loading && filtered.length < flights.length && (
-                <button
-                  className="text-xs text-blue-600 hover:underline"
-                  onClick={() => setFilters(DEFAULT_FILTERS)}
-                >
-                  Clear filters ({flights.length - filtered.length} hidden)
-                </button>
-              )}
+              <Select
+                value={sort}
+                onChange={e => setSort(e.target.value as SortKey)}
+                options={SORT_OPTIONS}
+                className="w-52"
+              />
             </div>
 
             {error && (
@@ -924,24 +951,15 @@ export default function FlightsPage() {
 
             <div className="flex flex-col gap-3">
               {loading
-                ? Array.from({ length: 5 }).map((_, i) => <FlightCardSkeleton key={i} />)
+                ? Array.from({ length: 4 }).map((_, i) => <FlightCardSkeleton key={i} />)
                 : filtered.length === 0
                   ? (
-                    <div className="flex flex-col items-center justify-center py-20 text-gray-400 bg-white rounded-xl border border-gray-200">
-                      <p className="text-4xl mb-3">✈️</p>
-                      <p className="text-lg font-semibold text-gray-700">No flights found</p>
-                      <p className="text-sm mt-1">Try different dates, or adjust your filters</p>
-                      {flights.length > 0 && (
-                        <button
-                          className="mt-4 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-semibold hover:bg-orange-600"
-                          onClick={() => setFilters(DEFAULT_FILTERS)}
-                        >
-                          Clear all filters
-                        </button>
-                      )}
+                    <div className="flex flex-col items-center justify-center py-20 text-gray-400 bg-white rounded-xl border border-gray-100">
+                      <p className="text-lg font-semibold">No flights found</p>
+                      <p className="text-sm mt-1">Try different dates, airports, or adjust filters</p>
                     </div>
                   )
-                  : filtered.map(f => <FlightCard key={f.id} flight={f} passengerCount={travellers.adults + travellers.children + travellers.infants} />)
+                  : filtered.map(f => <FlightCard key={f.id} flight={f} />)
               }
             </div>
           </div>

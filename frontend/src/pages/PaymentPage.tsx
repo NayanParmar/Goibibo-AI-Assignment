@@ -1,57 +1,26 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
-import { CreditCard, Wallet, CheckCircle, Lock, AlertCircle } from 'lucide-react'
+import { CreditCard, Wallet, CheckCircle, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { api } from '@/api/axios'
-import { endpoints } from '@/api/endpoints'
-import type { CreateOrderResponse, ApiResponse } from '@/types'
-import { useAuth } from '@/hooks/useAuth'
-
-declare global {
-  interface Window {
-    Razorpay: new (options: RazorpayOptions) => { open(): void }
-  }
-}
-
-interface RazorpayOptions {
-  key: string
-  amount: number
-  currency: string
-  name: string
-  description: string
-  order_id: string
-  prefill?: { name?: string; email?: string }
-  theme?: { color?: string }
-  handler(response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }): void
-  modal?: { ondismiss?(): void }
-}
-
-function loadRazorpayScript(): Promise<boolean> {
-  return new Promise(resolve => {
-    if (window.Razorpay) { resolve(true); return }
-    const script = document.createElement('script')
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
-    script.onload = () => resolve(true)
-    script.onerror = () => resolve(false)
-    document.body.appendChild(script)
-  })
-}
 
 export default function PaymentPage() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
-  const { user } = useAuth()
   const bookingId = params.get('bookingId') ?? ''
   const amount = Number(params.get('amount') ?? 0)
 
+  const [method, setMethod] = useState<'card' | 'upi' | 'wallet'>('card')
   const [loading, setLoading] = useState(false)
   const [paid, setPaid] = useState(false)
   const [error, setError] = useState('')
-  const [scriptReady, setScriptReady] = useState(false)
 
-  useEffect(() => {
-    loadRazorpayScript().then(setScriptReady)
-  }, [])
+  // Card fields
+  const [cardNum, setCardNum] = useState('')
+  const [expiry, setExpiry] = useState('')
+  const [cvv, setCvv] = useState('')
+  const [name, setName] = useState('')
+  const [upi, setUpi] = useState('')
 
   if (!bookingId) return (
     <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4">
