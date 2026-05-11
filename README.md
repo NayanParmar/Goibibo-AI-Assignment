@@ -22,6 +22,8 @@ Full-stack travel booking platform built with .NET 8 Clean Architecture + React 
 
 TravelPort covers:
 - Flight Search & Booking (900+ DB seed flights — IndiGo, SpiceJet, Vistara, Akasa Air, Air India, Air India Express, Go First across 42 routes)
+- Goibibo-style Flight Fare Popup + Fare-family Booking Flow
+- Home page recent searches persist and reopen saved result pages
 - Hotel Search & Booking (Amadeus Hotel Offers API — toggle via config)
 - Bus Search (deterministic mock — realistic Indian operators & routes)
 - Train Search (deterministic mock — real train names, 5 classes, availability statuses)
@@ -30,8 +32,9 @@ TravelPort covers:
 - Booking Management & Cancellation
 - Wallet & Coupons
 - Razorpay Payment Gateway (toggle via config; falls back to mock in dev)
-- Email Notifications via SendGrid (toggle via config)
+- Email Notifications via SMTP (toggle via config)
 - Admin Panel
+- Dynamic Traveller Details UI based on selected seat count
 
 ---
 
@@ -111,6 +114,8 @@ Frontend runs at `http://localhost:5173`
 |---|---|---|
 | POST | /api/v1/auth/register | No |
 | POST | /api/v1/auth/login | No |
+| POST | /api/v1/auth/forgot-password | No |
+| POST | /api/v1/auth/reset-password | No |
 | GET | /api/v1/flights/search | No |
 | POST | /api/v1/flights/book | Yes |
 | GET | /api/v1/hotels/search | No |
@@ -122,6 +127,7 @@ Frontend runs at `http://localhost:5173`
 | POST | /api/v1/payments/verify | Yes |
 | GET | /api/v1/bookings | Yes |
 | DELETE | /api/v1/bookings/{id}/cancel | Yes |
+| GET | /api/v1/bookings/{id}/invoice | Yes |
 | GET | /api/v1/users/profile | Yes |
 
 Full reference: [API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md)
@@ -155,11 +161,20 @@ Credentials go in `backend/src/API/appsettings.Development.json` (gitignored —
 "Razorpay": { "KeyId": "rzp_test_xxx", "KeySecret": "YOUR_SECRET", "Enabled": true }
 ```
 
-### SendGrid (Email Notifications)
-1. Create account at [sendgrid.com](https://sendgrid.com) → API Keys
+### SMTP (Email Notifications)
+1. Use your SMTP provider credentials (Gmail, Mailgun, AWS SES, etc.)
 2. Set in config:
 ```json
-"Email": { "ApiKey": "SG.xxx", "FromEmail": "noreply@yourdomain.com", "FromName": "TravelPort", "Enabled": true }
+"Email": {
+  "Enabled": true,
+  "FromEmail": "noreply@yourdomain.com",
+  "FromName": "TravelPort",
+  "SmtpHost": "smtp.yourprovider.com",
+  "SmtpPort": 587,
+  "Username": "smtp-user",
+  "Password": "smtp-password",
+  "EnableSsl": true
+}
 ```
 
 ---

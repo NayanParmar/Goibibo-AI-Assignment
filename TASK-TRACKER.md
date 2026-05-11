@@ -121,6 +121,14 @@
 | 4.28 | GIT.md created | ✅ | Branch naming, commit format, PR template |
 | 4.29 | TODO.md created | ✅ | Bugs, features pending, technical debt |
 | 4.30 | TASK-TRACKER.md created | ✅ | This file |
+| 4.31 | FlightCard — fare options modal on VIEW FARES | ✅ | Goibibo-style popup with 3 fare cards and BOOK NOW CTA |
+| 4.32 | BookFlightPage — redesign to fare-summary layout | ✅ | Flight summary, policy card, coupon section, sticky pricing sidebar |
+| 4.33 | BookFlightPage — dynamic traveller details UI | ✅ | Forms rendered from selected passenger count with contact and GST fields |
+| 4.34 | BookingDetailPage — Goibibo-style confirmation redesign | ✅ | Rich flight card, traveller/contact blocks, actions sidebar, fare summary |
+| 4.35 | Bookings API — downloadable PDF e-ticket endpoint | ✅ | `GET /bookings/{id}/invoice` returns generated PDF ticket |
+| 4.36 | Email notifications — SMTP-ready confirmation flow | ✅ | Booking confirmation email wired with config-based SMTP fallback logging |
+| 4.37 | HomePage — remove top transport tabs from search hero | ✅ | Search form now opens directly without Flights/Hotels/Cabs/Trains/Buses pills above it |
+| 4.38 | HomePage — recent searches persist with deep-link navigation | ✅ | Stored in localStorage and clicking reopens the saved results page |
 
 ---
 
@@ -135,11 +143,12 @@
 | 5.5 | Wallet transaction race condition fix | 🟡 Medium | Phase 5 |
 | 5.6 | Admin dashboard UI (React pages) | 🟡 Medium | Phase 5 |
 | 5.7 | Saved travellers UI | 🟡 Medium | Phase 5 |
-| 5.8 | Email verification flow (OTP) | 🟡 Medium | Phase 5 |
-| 5.9 | Invoice download (PDF) | 🟡 Medium | Phase 5 |
-| 5.10 | Unit tests for FlightService, HotelService | 🟢 Low | Phase 6 |
-| 5.11 | GitHub Actions CI (build + lint) | 🟢 Low | Phase 6 |
-| 5.12 | Docker containerisation | 🟢 Low | Phase 6 |
+| 5.8 | Forgot password / Reset password flow | ✅ Done | Backend endpoints wired; SendGrid email or dev log fallback; reset token expires in 1 hour |
+| 5.9 | Email verification flow (OTP) | 🟡 Medium | Phase 5 |
+| 5.10 | Invoice download (PDF) | ✅ Done | `GET /bookings/{id}/invoice` — backend PDF generation + frontend download fallback |
+| 5.11 | Unit tests for FlightService, HotelService | 🟢 Low | Phase 6 |
+| 5.12 | GitHub Actions CI (build + lint) | 🟢 Low | Phase 6 |
+| 5.13 | Docker containerisation | 🟢 Low | Phase 6 |
 
 ---
 
@@ -160,11 +169,11 @@ dotnet run --project src/API --launch-profile https
 | Metric | Value |
 |---|---|
 | Total phases completed | 4 |
-| Total features delivered | 92 |
-| Flights in seed DB | 900+ |
+| Total features delivered | 100+ |
+| Flights in seed DB | 900+ (dynamic demand-based pricing) |
 | Hotels in seed DB | 40+ (12 cities) |
-| API endpoints | 35+ |
-| Frontend pages | 10 |
+| API endpoints | 37+ |
+| Frontend pages | 11 |
 | Airlines covered | 7 |
 | Routes covered | 42 bidirectional |
-| External API integrations | 3 (Duffel, Razorpay, SendGrid) |
+| External API integrations | 3 (Duffel, Razorpay, SMTP) |

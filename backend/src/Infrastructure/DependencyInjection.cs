@@ -38,10 +38,10 @@ public static class DependencyInjection
         services.AddHttpClient<RazorpayService>();
         services.AddScoped<IPaymentService, RazorpayService>();
 
-        // ── Email (SendGrid) ──────────────────────────────────────────────────
+        // ── Email (SMTP) ──────────────────────────────────────────────────────
         services.Configure<EmailSettings>(configuration.GetSection("Email"));
-        services.AddHttpClient<SendGridEmailService>();
-        services.AddScoped<IEmailService, SendGridEmailService>();
+        services.AddScoped<IEmailService, SmtpEmailService>();
+        services.AddSingleton<IInvoiceDocumentService, InvoiceDocumentService>();
 
         // ── Transport mock providers ──────────────────────────────────────────
         services.AddSingleton<BusSearchProvider>();

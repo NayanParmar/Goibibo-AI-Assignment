@@ -941,7 +941,7 @@ export default function FlightsPage() {
                       )}
                     </div>
                   )
-                  : filtered.map(f => <FlightCard key={f.id} flight={f} />)
+                  : filtered.map(f => <FlightCard key={f.id} flight={f} passengerCount={travellers.adults + travellers.children + travellers.infants} />)
               }
             </div>
           </div>

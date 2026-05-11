@@ -220,6 +220,7 @@ export interface BookingDto {
   type: BookingType
   status: BookingStatus
   totalAmount: number
+  finalAmount: number
   bookingDate: string
   flightId?: string
   hotelId?: string
@@ -228,6 +229,18 @@ export interface BookingDto {
   checkOut?: string
   couponCode?: string
   discountAmount: number
+  userName?: string
+  userEmail?: string
+  userPhone?: string
+  airline?: string
+  flightNumber?: string
+  origin?: string
+  originCity?: string
+  destination?: string
+  destinationCity?: string
+  departureTime?: string
+  arrivalTime?: string
+  durationMinutes?: number
 }
 
 // ── Users ─────────────────────────────────────────────────────────────────────

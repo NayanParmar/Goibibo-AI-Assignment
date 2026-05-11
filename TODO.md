@@ -26,11 +26,10 @@
 - [ ] 🔴 **Multi-city flight search** — `FlightSearchRequest` supports origin/destination only. Add `MultiCity` trip type.
 - [ ] 🔴 **Bus & Train booking persistence** — buses and trains are mocked in-memory; they have no DB entity or booking endpoint. Add `Bus` and `Train` domain entities + booking flow.
 - [ ] 🔴 **Cab booking persistence** — same as buses/trains.
-- [ ] 🟡 **Forgot password / Reset password** — endpoints documented in API spec (`/auth/forgot-password`, `/auth/reset-password`) but SendGrid email flow needs wiring.
 - [ ] 🟡 **Email verification on registration** — OTP flow documented but `IsVerified` is set to `true` in seed; registration sets it `false` with no verification path yet.
-- [ ] 🟡 **Invoice download** — `GET /bookings/:id/invoice` documented but not implemented.
 - [ ] 🟡 **Admin analytics endpoint** — `GET /admin/analytics` is a stub; add real aggregation queries.
 - [ ] 🟡 **Paginated flight search response** — backend returns all matching flights in one call (up to `pageSize=100`); add proper server-side pagination with `total` and `page` in response.
+- [ ] 🟡 **Persist individual flight traveller details** — the booking UI now collects per-traveller name/age/gender/ID data, but the current flight booking API still stores passenger count only.
 - [ ] 🟢 **Real Razorpay webhook handler** — for production, handle `payment.failed` and `order.paid` webhooks to update booking status asynchronously.
 - [ ] 🟢 **Rate limiting** — `429` is documented but no rate-limiting middleware is active.
 - [ ] 🟢 **Refresh token rotation** — currently refresh tokens are single-use but rotation isn't enforced; expired tokens should be revoked from DB.
@@ -87,5 +86,9 @@
 - [x] FlightCard redesign — airline color badge, VIEW FARES button, Goibibo layout
 - [x] Buses, Trains, Cabs frontend pages
 - [x] PaymentPage with Razorpay checkout and mock fallback
+- [x] Forgot password / Reset password flow with expiring email link and token invalidation
+- [x] Goibibo-style flight fare popup with fare-family booking flow and traveller details UI
+- [x] Goibibo-style booking detail page with downloadable PDF e-ticket
+- [x] Home page recent searches saved with click-through navigation
 - [x] FlightCard — stops badge, baggage, refundable, originCity/destinationCity
 - [x] CLAUDE.md, GIT.md, TODO.md, TASK-TRACKER.md created

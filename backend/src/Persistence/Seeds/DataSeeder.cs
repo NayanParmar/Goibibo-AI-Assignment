@@ -156,69 +156,119 @@ public static class DataSeeder
         [8, 15],                          // Go First
     ];
 
+    // ── Demand multiplier: day-of-week + peak periods (May–June 2026) ───────────
+    private static decimal GetDemandMultiplier(DateTime date)
+    {
+        // Day-of-week base
+        decimal mult = date.DayOfWeek switch
+        {
+            DayOfWeek.Saturday => 1.55m,   // peak leisure — beach/hills rush
+            DayOfWeek.Friday   => 1.40m,   // getaway start
+            DayOfWeek.Sunday   => 1.28m,   // return journeys
+            DayOfWeek.Thursday => 1.15m,   // corporate + early travellers
+            DayOfWeek.Monday   => 1.08m,   // post-weekend stragglers
+            _                  => 1.00m,   // mid-week budget window
+        };
+
+        // Indian school summer vacation surge (May 15 – Jun 15): families travel
+        if ((date.Month == 5 && date.Day >= 15) || (date.Month == 6 && date.Day <= 15))
+            mult *= 1.25m;
+
+        // Buddha Purnima long weekend (May 11–13): holiday cluster
+        if (date.Month == 5 && date.Day is >= 11 and <= 13)
+            mult *= 1.18m;
+
+        // Eid al-Adha cluster (~Jun 6–9): biggest travel surge of the window
+        if (date.Month == 6 && date.Day is >= 5 and <= 9)
+            mult *= 1.38m;
+
+        // End-of-June rush (Jun 27–30): return before July school re-openings
+        if (date.Month == 6 && date.Day >= 27)
+            mult *= 1.15m;
+
+        return Math.Min(mult, 2.5m); // hard cap — no extreme outliers
+    }
+
     private static List<Flight> BuildFlights()
     {
-        var t = DateTime.UtcNow.Date;
-        // 14 date slots: +7 to +35 days
-        int[] offsets = [7, 8, 10, 12, 14, 15, 17, 19, 21, 23, 25, 28, 30, 35];
-        var dates = offsets.Select(o => t.AddDays(o)).ToArray();
+        var today = DateTime.UtcNow.Date;
+        // Full May–June 2026; only future dates included (safe to reseed any day in May/June)
+        var dates = Enumerable.Range(0, 61)
+            .Select(i => new DateTime(2026, 5, 1).AddDays(i))
+            .Where(d => d >= today && d <= new DateTime(2026, 6, 30))
+            .ToArray();
 
         var flights = new List<Flight>();
-        var flightNumCounters = new Dictionary<string, int>();
+        var counters = new Dictionary<string, int>();
 
         foreach (var (src, dst, baseDur, ecoBase, bizBase) in Routes)
         {
-            // pick airlines for this route (long-haul = fewer LCCs, short = all)
             var airlineIndices = baseDur >= 150
-                ? new[] { 0, 2, 3 }       // long: IndiGo, Air India, Vistara
+                ? new[] { 0, 2, 3 }
                 : baseDur >= 100
-                    ? new[] { 0, 1, 2, 4 } // medium: IndiGo, SpiceJet, Air India, Akasa
-                    : new[] { 0, 1, 4, 5, 6 }; // short: more LCCs
+                    ? new[] { 0, 1, 2, 4 }
+                    : new[] { 0, 1, 4, 5, 6 };
 
             foreach (var ai in airlineIndices)
             {
                 var (airline, code, flightBase, priceMult) = Airlines[ai];
-                var hours = DepHours[ai];
+                var hours  = DepHours[ai];
 
                 foreach (var date in dates)
                 {
-                    // not every airline flies every date — deterministic skip
-                    var skip = (HashCode.Combine(src, dst, airline, date.DayOfYear) & 3) == 0;
-                    if (skip && hours.Length > 2) continue; // keep at least some
+                    var demand = GetDemandMultiplier(date);
 
-                    var hourIdx = (date.DayOfYear + flightBase) % hours.Length;
-                    var depHour = hours[hourIdx];
+                    // Peak days: airlines add capacity → harder to skip
+                    var skipBits = demand >= 1.5m ? 15 : demand >= 1.25m ? 7 : 3;
+                    var skip = (HashCode.Combine(src, dst, airline, date.DayOfYear) & skipBits) == 0;
+                    if (skip && hours.Length > 2) continue;
 
-                    var key = $"{code}_{src}_{dst}";
-                    if (!flightNumCounters.TryGetValue(key, out var n)) n = flightBase;
-                    flightNumCounters[key] = n + 2;
+                    // High-demand days: major airlines add a second departure
+                    int departures = demand >= 1.35m && hours.Length >= 4 && ai <= 2 ? 2 : 1;
 
-                    var depMin  = ((date.DayOfYear + flightBase) % 4) * 15; // 0/15/30/45
-                    var dur     = baseDur + (((date.DayOfYear * 7) % 20) - 10); // ±10 min variation
-                    var dep     = date.AddHours(depHour).AddMinutes(depMin);
-                    var arr     = dep.AddMinutes(dur);
-                    var eco     = Math.Round(ecoBase * priceMult + ((date.DayOfYear % 5) * 100), 0);
-                    var biz     = bizBase.HasValue ? (decimal?)Math.Round(bizBase.Value * priceMult, 0) : null;
-                    var total   = airline == "IndiGo" ? 180 : airline == "Air India" ? 200 : 170;
-                    var avail   = 60 + (HashCode.Combine(src, dst, airline, date.DayOfYear) % 80);
-
-                    flights.Add(new Flight
+                    for (int slot = 0; slot < departures; slot++)
                     {
-                        Id             = Guid.NewGuid(),
-                        Airline        = airline,
-                        FlightNumber   = $"{code}-{n}",
-                        Source         = src,
-                        Destination    = dst,
-                        DepartureTime  = dep,
-                        ArrivalTime    = arr,
-                        Duration       = dur,
-                        TotalSeats     = total,
-                        AvailableSeats = Math.Abs(avail),
-                        EconomyPrice   = eco,
-                        BusinessPrice  = biz,
-                        Stops          = 0,
-                        IsActive       = true
-                    });
+                        var key = $"{code}_{src}_{dst}";
+                        if (!counters.TryGetValue(key, out var n)) n = flightBase;
+                        counters[key] = n + 2;
+
+                        var hourIdx = (date.DayOfYear + flightBase + slot * 5) % hours.Length;
+                        var depHour = hours[hourIdx];
+                        var depMin  = ((date.DayOfYear + flightBase + slot) % 4) * 15;
+                        var dur     = baseDur + (((date.DayOfYear * 7) % 20) - 10);
+                        var dep     = date.AddHours(depHour).AddMinutes(depMin);
+                        var arr     = dep.AddMinutes(dur);
+
+                        // Price: base × airline multiplier × demand multiplier ± small day variation
+                        var dayVariation = (date.Day % 5) * 80m;
+                        var eco = Math.Round(ecoBase * priceMult * demand + dayVariation, 0);
+                        var biz = bizBase.HasValue ? (decimal?)Math.Round(bizBase.Value * priceMult * demand, 0) : null;
+
+                        // Seats: fewer on peak days (high demand = faster sell-out)
+                        var total = airline == "IndiGo" ? 180 : airline == "Air India" ? 200 : 170;
+                        var hash  = HashCode.Combine(src, dst, airline, date.DayOfYear, slot);
+                        var avail = demand >= 1.4m
+                            ? 15 + (Math.Abs(hash) % 45)   // 15–60 on peak (selling fast)
+                            : 55 + (Math.Abs(hash) % 80);  // 55–135 on off-peak (plenty of seats)
+
+                        flights.Add(new Flight
+                        {
+                            Id             = Guid.NewGuid(),
+                            Airline        = airline,
+                            FlightNumber   = $"{code}-{n}",
+                            Source         = src,
+                            Destination    = dst,
+                            DepartureTime  = dep,
+                            ArrivalTime    = arr,
+                            Duration       = dur,
+                            TotalSeats     = total,
+                            AvailableSeats = Math.Min(avail, total),
+                            EconomyPrice   = eco,
+                            BusinessPrice  = biz,
+                            Stops          = 0,
+                            IsActive       = true
+                        });
+                    }
                 }
             }
         }

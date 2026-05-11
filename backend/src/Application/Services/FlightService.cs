@@ -16,6 +16,8 @@ public class FlightService : IFlightService
     private readonly IWalletService _wallet;
     private readonly ICacheService _cache;
     private readonly IUnitOfWork _uow;
+    private readonly IUserRepository _users;
+    private readonly IEmailService _email;
     private readonly IExternalFlightProvider? _externalProvider;
 
     private static readonly Dictionary<string, string> AirlineCodeMap = new(StringComparer.OrdinalIgnoreCase)
@@ -35,6 +37,7 @@ public class FlightService : IFlightService
 
     public FlightService(IFlightRepository flights, IBookingRepository bookings,
         IWalletService wallet, ICacheService cache, IUnitOfWork uow,
+        IUserRepository users, IEmailService email,
         IExternalFlightProvider? externalProvider = null)
     {
         _flights = flights;
@@ -42,6 +45,8 @@ public class FlightService : IFlightService
         _wallet = wallet;
         _cache = cache;
         _uow = uow;
+        _users = users;
+        _email = email;
         _externalProvider = externalProvider;
     }
 
@@ -174,6 +179,13 @@ public class FlightService : IFlightService
         await _uow.SaveChangesAsync(ct);
         await _cache.RemoveAsync($"flight:{req.FlightId}", ct);
 
+        var user = await _users.GetByIdAsync(userId, ct);
+        if (user is not null)
+        {
+            var details = BuildBookingConfirmationDetails(referenceId, req, unitPrice, total);
+            await _email.SendBookingConfirmationAsync(user.Email, user.Name, booking.BookingRef, details, ct);
+        }
+
         return new BookingCreatedResponse(booking.Id, booking.BookingRef, booking.TotalAmount, booking.Status);
     }
 
@@ -235,5 +247,16 @@ public class FlightService : IFlightService
         }
         catch { }
         return 0m;
+    }
+
+    private static string BuildBookingConfirmationDetails(Guid referenceId, BookFlightRequest request, decimal unitPrice, decimal total)
+    {
+        return
+            $"Booking Type: Flight{Environment.NewLine}" +
+            $"Flight Reference: {referenceId}{Environment.NewLine}" +
+            $"Cabin Class: {request.CabinClass}{Environment.NewLine}" +
+            $"Passengers: {request.Passengers}{Environment.NewLine}" +
+            $"Price Per Traveller: INR {unitPrice:0}{Environment.NewLine}" +
+            $"Total Amount: INR {total:0}";
     }
 }

@@ -44,6 +44,35 @@ Response 200:
 }
 ```
 
+### POST /auth/forgot-password
+```json
+Request:
+{ "email": "john@example.com" }
+
+Response 200:
+{
+  "success": true,
+  "message": "If an account with that email exists, a password reset link has been sent."
+}
+```
+
+The reset link points to `http://localhost:5173/reset-password?token=...` and expires in **1 hour**.
+When SendGrid is disabled in development, the backend logs the reset link instead of sending email.
+
+### POST /auth/reset-password
+```json
+Request:
+{ "token": "raw-reset-token", "newPassword": "NewPass@123" }
+
+Response 200:
+{
+  "success": true,
+  "message": "Password reset successful."
+}
+```
+
+On success, all existing refresh tokens for that user are revoked.
+
 ---
 
 ## Flights
@@ -266,6 +295,14 @@ Response 200:
 | GET    | `/bookings/:id`         | ✅   | Booking details       |
 | POST   | `/bookings/:id/cancel`  | ✅   | Cancel booking        |
 | GET    | `/bookings/:id/invoice` | ✅   | Download invoice      |
+
+### GET /bookings/:id/invoice
+Returns a downloadable PDF e-ticket for the authenticated user's booking.
+
+Response:
+- `200 OK`
+- `Content-Type: application/pdf`
+- `Content-Disposition: attachment; filename="<booking-ref>-e-ticket.pdf"`
 
 ---
 
