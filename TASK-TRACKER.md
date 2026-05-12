@@ -212,23 +212,73 @@
 
 ---
 
+---
+
+## Phase 7 — Admin Dashboard, Bug Fixes & Email Overhaul
+**Branch:** `feature/admin-dashboard-bugfixes`
+**Date:** 2026-05-12
+**Scope:** Full admin panel, enum serialization fix, wallet refund fix, email HTML compatibility, reset password UX, themed ConfirmDialog
+
+| # | Feature | Status | Notes |
+|---|---|---|---|
+| 7.1 | `JsonStringEnumConverter` in `Program.cs` | ✅ | Enums serialize as strings — fixes cancel button not showing |
+| 7.2 | `BookingStatus.Refunded` → `Completed` | ✅ | No migration needed; integer values unchanged |
+| 7.3 | `BookingService.CancelAsync` — wallet refund wired | ✅ | Was calculating refund but never calling `_wallet.RefundAsync` |
+| 7.4 | `SmtpEmailService` — full HTML rewrite for Gmail/Outlook | ✅ | Replaced gradient/rgba/flex with solid hex + table layouts; table-based CTA buttons |
+| 7.5 | `ConfirmDialog` component | ✅ | Branded modal replacing native `confirm()`; danger/warning variants, Escape+backdrop dismiss |
+| 7.6 | `tailwind.config.js` — `animate-fade-in` keyframe | ✅ | Scale+translateY entrance for ConfirmDialog |
+| 7.7 | `BookingCard` — cancel uses ConfirmDialog | ✅ | `handleCancelClick` shows dialog; `handleConfirmCancel` calls API |
+| 7.8 | `BookingDetailPage` — cancel uses ConfirmDialog | ✅ | Replaces native `confirm()` on the detail page cancel button |
+| 7.9 | `ResetPasswordPage` — UX fixes | ✅ | Password hint mentions special chars; actual server error shown; "1 hour" TTL text |
+| 7.10 | `ForgotPasswordPage` — TTL text fix | ✅ | "30 minutes" → "1 hour" |
+| 7.11 | Admin DTOs (4 new files) | ✅ | `AdminDashboardDto`, `AdminUserDto`, `CouponDto` + requests, `AdminAnalyticsDto` |
+| 7.12 | Repository extensions for admin | ✅ | `GetPagedAsync` (users), `GetAllPagedAsync` + `GetAllForAnalyticsAsync` (bookings), `GetAllCouponsAsync` + `CodeExistsAsync` (coupons) |
+| 7.13 | `IAdminService` + `AdminService` | ✅ | 9-method service: dashboard, analytics, users, block, bookings, coupons CRUD |
+| 7.14 | `AdminController` — 9 real endpoints | ✅ | All `[Authorize(Roles = "Admin")]`; replaced placeholder stubs |
+| 7.15 | `AdminService` registered in DI | ✅ | `services.AddScoped<IAdminService, AdminService>()` |
+| 7.16 | `AdminPage.tsx` — 4-tab dashboard | ✅ | Dashboard (stat cards + bar chart), Users (search+block), Bookings (filter+paginate), Coupons (CouponModal+deactivate) |
+| 7.17 | `adminService.ts` + `endpoints.ts` + admin types | ✅ | 9 typed service methods; analytics + coupon(id) endpoints added |
+
+---
+
+## Phase 8 — Docker & CI/CD Pipeline
+**Branch:** `feature/cicd-docker`
+**Date:** 2026-05-12
+**Scope:** Full containerisation (SQL Server + .NET API + React/Nginx) and GitHub Actions CI/CD deploy pipeline
+
+| # | Feature | Status | Notes |
+|---|---|---|---|
+| 8.1 | `backend/Dockerfile` — multi-stage SDK→runtime build | ✅ | Non-root `appuser`, `ASPNETCORE_URLS=http://+:5000`, Release publish |
+| 8.2 | `backend/.dockerignore` | ✅ | Excludes bin/obj/logs/appsettings.Development.json |
+| 8.3 | `frontend/Dockerfile` — multi-stage Node→Nginx build | ✅ | `VITE_API_BASE_URL=""` build arg → relative `/api/v1` base URL in production |
+| 8.4 | `frontend/nginx.conf` — SPA routing + API proxy | ✅ | `try_files → index.html`, `/api/` → `http://api:5000`, gzip, security headers, asset cache |
+| 8.5 | `frontend/.dockerignore` | ✅ | Excludes node_modules/dist/.env files |
+| 8.6 | `docker-compose.yml` | ✅ | SQL Server (healthcheck) → API (waits healthy) → Web; all config via env vars; `sqldata` volume |
+| 8.7 | `.env.example` | ✅ | Documents all 16 required env vars with example values |
+| 8.8 | `.github/workflows/deploy.yml` — 3-job pipeline | ✅ | build (every push+PR) → docker push to ghcr.io → SSH deploy with `environment: production` |
+| 8.9 | GHA — Docker layer cache via `cache-from/to: type=gha` | ✅ | Separate scopes for api and web; significantly speeds up rebuilds |
+| 8.10 | GHA — `concurrency` group cancels in-flight runs | ✅ | Prevents duplicate deploys on rapid pushes |
+| 8.11 | GHA — `.env` written from secrets at deploy time | ✅ | No secrets stored on server between deploys |
+| 8.12 | `Program.cs` — `db.Database.Migrate()` on startup | ✅ | Idempotent; replaces manual `dotnet ef database update` in containers |
+| 8.13 | `Program.cs` — Swagger enabled in all environments | ✅ | Accessible at `/swagger` in Docker for API testing |
+| 8.14 | `appsettings.json` — localhost origins for Docker | ✅ | `http/https://localhost` added; production domain via `AllowedOrigins__0/1` env var |
+| 8.15 | `vite.config.ts` — fix dev proxy to HTTP :5000 | ✅ | Was pointing to HTTPS :7001; local dev now correctly proxies to HTTP API port |
+| 8.16 | `docs/DEPLOYMENT.md` | ✅ | Architecture diagram, local Docker run, server setup, GitHub Secrets table, rollback, backup, troubleshooting |
+
+---
+
 ## Upcoming / Planned
 
 | # | Feature | Priority | Phase |
 |---|---|---|---|
-| 5.1 | Mobile filter drawer (slide-over) for FlightsPage | 🔴 High | Phase 5 |
-| 5.2 | Hotel search filter sidebar (Goibibo style) | 🔴 High | Phase 5 |
-| 5.3 | Bus / Train / Cab booking — persistence + API | 🔴 High | Phase 5 |
-| 5.4 | Fix coupon discount not applied to `FinalAmount` | 🔴 High | Phase 5 |
-| 5.5 | Wallet transaction race condition fix | 🟡 Medium | Phase 5 |
-| 5.6 | Admin dashboard UI (React pages) | 🟡 Medium | Phase 5 |
-| 5.7 | Saved travellers UI | 🟡 Medium | Phase 5 |
-| 5.8 | Forgot password / Reset password flow | ✅ Done | Backend endpoints wired; SendGrid email or dev log fallback; reset token expires in 1 hour |
-| 5.9 | Email verification flow (OTP) | 🟡 Medium | Phase 5 |
-| 5.10 | Invoice download (PDF) | ✅ Done | `GET /bookings/{id}/invoice` — Goibibo-style PDF with QuestPDF: branded header, IATA codes, passenger/baggage/cancellation tables |
-| 5.11 | Unit tests for FlightService, HotelService | 🟢 Low | Phase 6 |
-| 5.12 | GitHub Actions CI (build + lint) | 🟢 Low | Phase 6 |
-| 5.13 | Docker containerisation | 🟢 Low | Phase 6 |
+| 9.1 | Mobile filter drawer (slide-over) for FlightsPage | 🔴 High | Phase 9 |
+| 9.2 | Bus / Train / Cab booking — persistence + API | 🔴 High | Phase 9 |
+| 9.3 | Wallet transaction race condition fix | 🟡 Medium | Phase 9 |
+| 9.4 | Saved travellers UI | 🟡 Medium | Phase 9 |
+| 9.5 | Email verification flow (OTP) | 🟡 Medium | Phase 9 |
+| 9.6 | HTTPS with Let's Encrypt (Nginx + Certbot sidecar) | 🟡 Medium | Phase 9 |
+| 9.7 | Unit tests for FlightService, HotelService | 🟢 Low | Phase 9 |
+| 9.8 | Redis cache (replace in-memory IMemoryCache) | 🟢 Low | Phase 9 |
 
 ---
 
@@ -248,13 +298,13 @@ dotnet run --project src/API --launch-profile https
 
 | Metric | Value |
 |---|---|
-| Total phases completed | 6 |
-| Total features delivered | 130+ |
+| Total phases completed | 8 |
+| Total features delivered | 170+ |
 | Flights in seed DB | 900+ (dynamic demand-based pricing) |
 | Hotels in seed DB | 60+ (12 cities) |
 | Coupons | 11 (5 original + 6 new: FLYSAVER, FLYOFF200, FLYDEAL15, HOTELOFF15, STAYMORE, HOTELDEAL) |
 | API endpoints | 40+ |
-| Frontend pages | 13 |
+| Frontend pages | 14 |
 | Airlines covered | 7 |
 | Routes covered | 42 bidirectional |
 | External API integrations | 3 (Duffel, Razorpay, SMTP/Office365) |
