@@ -30,7 +30,7 @@ export default function BookingsPage() {
       const res = await bookingService.list(p, PAGE_SIZE)
       setBookings(res.data ?? [])
       const meta = res.meta
-      if (meta) setTotal(meta.total ?? meta.totalPages * PAGE_SIZE ?? 0)
+      if (meta) setTotal(meta.total ?? meta.totalPages * PAGE_SIZE)
     } catch {
       setError('Failed to load bookings.')
     } finally {
