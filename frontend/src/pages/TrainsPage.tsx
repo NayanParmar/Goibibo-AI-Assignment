@@ -79,6 +79,8 @@ export default function TrainsPage() {
     return results
   }, [rawTrains, filterTatkal, filterClasses, filterDeptSlot, filterMaxPrice, sortBy])
 
+  const showFilters = !loading && rawTrains.length > 0
+
   useEffect(() => {
     if (searchParams.get('origin')) search()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -147,6 +149,7 @@ export default function TrainsPage() {
 
       <div className="max-w-6xl mx-auto px-4 py-6 flex gap-6">
         {/* Filters */}
+        {showFilters && (
         <div className="w-60 shrink-0">
           <div className="bg-white rounded-xl shadow-sm overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
@@ -216,6 +219,7 @@ export default function TrainsPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Results */}
         <div className="flex-1">

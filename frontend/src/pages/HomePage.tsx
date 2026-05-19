@@ -399,7 +399,7 @@ export default function HomePage() {
           {/* ── HOTEL SEARCH ── */}
           {mode === 'hotel' && (
             <form onSubmit={handleHotelSearch}>
-              <div className="bg-white rounded-2xl shadow-2xl p-4">
+              <div className="bg-white rounded-2xl shadow-2xl px-4 pt-4 pb-6">
                 <div className="flex flex-wrap gap-0 divide-x divide-gray-200">
                   <div className="flex-1 min-w-[180px] px-4 py-2">
                     <CitySearch label="City / Destination" placeholder="e.g. Mumbai, Goa" value={hotelCity} onChange={setHotelCity} focusColor="orange" />
@@ -409,8 +409,8 @@ export default function HomePage() {
                   <HeroInput label="Rooms"     type="number" placeholder="1" value={hotelRooms}    onChange={setHotelRooms}  />
                   <HeroInput label="Guests"    type="number" placeholder="1" value={hotelGuests}   onChange={setHotelGuests} />
                 </div>
-                <div className="mt-4 flex justify-center">
-                  <button type="submit" className="flex items-center gap-2 rounded-full px-10 py-3 font-bold text-white shadow-lg transition-all hover:shadow-xl hover:scale-105 active:scale-100" style={{ background: `linear-gradient(90deg, #c2410c, ${theme.accent})` }}>
+                <div className="mt-6 flex justify-center">
+                  <button type="submit" className="flex min-w-[180px] items-center justify-center gap-2 rounded-full px-10 py-3 font-bold text-white shadow-lg transition-all hover:shadow-xl hover:scale-105 active:scale-100" style={{ background: `linear-gradient(90deg, #c2410c, ${theme.accent})` }}>
                     <Search className="h-5 w-5" /> Search
                   </button>
                 </div>
