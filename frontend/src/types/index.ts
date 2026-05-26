@@ -913,6 +913,7 @@ export interface OperatorBusDto {
   totalSeats: number
   availableSeats: number
   price: number
+  upperBerthPrice?: number
   busType: string
   seatLayoutConfig: string
   seatRows: number
@@ -938,6 +939,7 @@ export interface CreateBusRequest {
   arrivalTime: string
   totalSeats: number
   price: number
+  upperBerthPrice?: number
   busType: string
   seatLayoutConfig: string
   seatRows: number
@@ -961,6 +963,7 @@ export interface UpdateBusRequest {
   arrivalTime?: string
   totalSeats?: number
   price?: number
+  upperBerthPrice?: number
   busType?: string
   seatLayoutConfig?: string
   seatRows?: number
@@ -999,6 +1002,8 @@ export interface BusSeatLayoutDto {
   ladiesSeats: string[]
   seats: SeatDto[]
   unassignedPassengers: number
+  busType: string
+  upperBerthPrice?: number
 }
 
 export interface BusSeatLayoutConfigRequest {

@@ -17,6 +17,7 @@ public class Bus : BaseEntity
     public int TotalSeats { get; set; } = 40;
     public int AvailableSeats { get; set; } = 40;
     public decimal Price { get; set; }
+    public decimal? UpperBerthPrice { get; set; }
 
     // Bus type: Sleeper, Semi-Sleeper, Seater, AC Seater, Volvo AC
     public string BusType { get; set; } = "AC Seater";

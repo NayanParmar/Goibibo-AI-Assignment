@@ -5,6 +5,25 @@
 
 ---
 
+## Phase 20 — Bus Operator UX Enhancements
+
+**Branch:** `feat/bus-operator-ux-enhancements`
+**Scope:** Smart Add Bus form — city autocomplete, conditional date picker, overnight journey support, auto seat rows, per-berth pricing, visual upper/lower berth seat map, return journey creation.
+
+| # | Feature | Status | Notes |
+|---|---|---|---|
+| 20.1 | City autocomplete for Origin/Destination | ✅ | `CitySearch` component (green theme) replaces plain text inputs; shows popular cities on focus, filters from 65+ Indian cities |
+| 20.2 | Conditional travel date picker | ✅ | Date picker only shown for OneTime schedule; Daily/Weekly use today's date as reference automatically |
+| 20.3 | Overnight journey support | ✅ | `buildDateTimeISO()` detects `arrivalClock < departureClock` and offsets arrival date by +1; 🌙 warning shown in form |
+| 20.4 | Auto-calculate seat rows | ✅ | `useEffect` watching `totalSeats` + `seatLayoutConfig` auto-sets `seatRows = ceil(seats ÷ seatsPerRow)` with formula hint |
+| 20.5 | Per-berth pricing (upper/lower) | ✅ | `UpperBerthPrice (decimal?)` added to Bus entity + DTOs + service + migration; separate price field shown for Sleeper/Semi-Sleeper |
+| 20.6 | Upper/Lower berth seat map visual | ✅ | `BusSeatMapModal` detects sleeper bus type and renders two labeled sections: "Lower Berth" and "Upper Berth" with dashed divider |
+| 20.7 | Return journey creation | ✅ | "Add Return Journey" checkbox in Add Bus form; pre-fills swapped Origin↔Destination; toggles: same seat config / same driver / same/new bus number; creates both buses in one save |
+| 20.8 | `UpperBerthPrice` in BusSeatLayoutDto | ✅ | `BusType` and `UpperBerthPrice` added to `BusSeatLayoutDto` so seat map can display berth-level pricing |
+| 20.9 | EF Core migration `AddBusUpperBerthPrice` | ✅ | Adds nullable `UpperBerthPrice` column to Buses table |
+
+---
+
 ## Phase 19 — Bus Operator Full Portal
 
 **Branch:** `feat/bus-operator-portal`

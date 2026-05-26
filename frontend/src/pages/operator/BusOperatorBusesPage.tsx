@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2, Bus, Map, Wifi, Zap, Wind, Droplets } from 'lucide-react'
+import { Plus, Pencil, Trash2, Bus, Map, Wifi, Zap, Wind, Droplets, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react'
 import { busOperatorService } from '@/services/operatorService'
 import { BusSeatMapModal } from './BusSeatMapModal'
+import { CitySearch } from '@/components/search/CitySearch'
 import type { OperatorBusDto, CreateBusRequest } from '@/types'
 
 const BUS_TYPES = ['AC Seater', 'Non-AC Seater', 'Sleeper', 'Semi-Sleeper', 'Volvo AC', 'Mini Bus']
@@ -9,12 +10,22 @@ const LAYOUT_PRESETS = ['2-2', '2-1', '1-1', '3-2', '2-2-2']
 const SCHEDULE_TYPES = ['OneTime', 'Daily', 'Weekly']
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 const AMENITY_OPTIONS = ['WiFi', 'Charging Point', 'Blanket', 'Water Bottle', 'Snacks', 'AC', 'Reading Light', 'Entertainment System', 'GPS Tracking']
+const SLEEPER_TYPES = ['Sleeper', 'Semi-Sleeper']
 
 const AMENITY_ICONS: Record<string, React.ElementType> = {
   'WiFi': Wifi,
   'Charging Point': Zap,
   'AC': Wind,
   'Water Bottle': Droplets,
+}
+
+function layoutSeatsPerRow(config: string): number {
+  return config.split('-').map(Number).filter(n => !isNaN(n) && n > 0).reduce((a, b) => a + b, 0) || 4
+}
+
+function autoRows(totalSeats: number, config: string): number {
+  const seatsPerRow = layoutSeatsPerRow(config)
+  return Math.ceil(totalSeats / seatsPerRow)
 }
 
 type BusFormState = Partial<CreateBusRequest> & {
@@ -25,6 +36,16 @@ type BusFormState = Partial<CreateBusRequest> & {
   ladiesSeatsRaw?: string
   amenitiesSelected: string[]
   daysSelected: string[]
+}
+
+type ReturnFormState = {
+  travelDate?: string
+  departureClock?: string
+  arrivalClock?: string
+  sameSeatConfig: boolean
+  sameDriver: boolean
+  sameBusNumber: boolean
+  customBusNumber?: string
 }
 
 function formatDuration(mins: number) {
@@ -42,8 +63,29 @@ function extractDateTimeParts(iso: string) {
   return { date: `${yyyy}-${mm}-${dd}`, time: `${hh}:${min}` }
 }
 
-function combineDateAndTime(date: string, time: string): string {
-  return `${date}T${time}`
+// Combine date and time, offsetting arrival date by +1 if arrival < departure (overnight)
+function buildDateTimeISO(date: string, clock: string, depClock?: string): string {
+  if (!date || !clock) return `${date}T${clock}`
+  let baseDate = date
+  if (depClock && clock < depClock) {
+    // Overnight: arrival is next day
+    const d = new Date(`${date}T00:00`)
+    d.setDate(d.getDate() + 1)
+    const yyyy = d.getFullYear()
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    baseDate = `${yyyy}-${mm}-${dd}`
+  }
+  return `${baseDate}T${clock}`
+}
+
+// For Daily/Weekly buses, use a fixed reference date (epoch of schedule)
+function getScheduleBaseDate(): string {
+  const today = new Date()
+  const yyyy = today.getFullYear()
+  const mm = String(today.getMonth() + 1).padStart(2, '0')
+  const dd = String(today.getDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
 }
 
 const defaultForm = (): BusFormState => ({
@@ -54,6 +96,13 @@ const defaultForm = (): BusFormState => ({
   scheduleType: 'OneTime',
   amenitiesSelected: [],
   daysSelected: [],
+  travelDate: getScheduleBaseDate(),
+})
+
+const defaultReturnForm = (): ReturnFormState => ({
+  sameSeatConfig: true,
+  sameDriver: true,
+  sameBusNumber: false,
 })
 
 export default function BusOperatorBusesPage() {
@@ -66,6 +115,11 @@ export default function BusOperatorBusesPage() {
   const [error, setError] = useState('')
   const [showSeatMap, setShowSeatMap] = useState(false)
 
+  // Return journey state
+  const [addReturnJourney, setAddReturnJourney] = useState(false)
+  const [returnForm, setReturnForm] = useState<ReturnFormState>(defaultReturnForm())
+  const [showReturnSection, setShowReturnSection] = useState(true)
+
   useEffect(() => {
     busOperatorService.getBuses()
       .then(setBuses)
@@ -73,9 +127,19 @@ export default function BusOperatorBusesPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  // Auto-calculate seat rows when totalSeats or seatLayoutConfig changes
+  useEffect(() => {
+    if (form.totalSeats && form.seatLayoutConfig && form.seatLayoutConfig !== 'custom') {
+      const rows = autoRows(Number(form.totalSeats), form.seatLayoutConfig)
+      setForm(prev => ({ ...prev, seatRows: rows }))
+    }
+  }, [form.totalSeats, form.seatLayoutConfig])
+
   const openAdd = () => {
     setEditBus(null)
     setForm(defaultForm())
+    setAddReturnJourney(false)
+    setReturnForm(defaultReturnForm())
     setShowForm(true)
     setError('')
   }
@@ -93,6 +157,7 @@ export default function BusOperatorBusesPage() {
       arrivalClock: arrival.time,
       totalSeats: b.totalSeats,
       price: b.price,
+      upperBerthPrice: b.upperBerthPrice,
       busType: b.busType,
       seatLayoutConfig: b.seatLayoutConfig,
       seatRows: b.seatRows,
@@ -108,12 +173,17 @@ export default function BusOperatorBusesPage() {
       droppingPoints: b.droppingPoints,
       isActive: b.isActive,
     })
+    setAddReturnJourney(false)
+    setReturnForm(defaultReturnForm())
     setShowForm(true)
     setError('')
   }
 
   const setField = <K extends keyof BusFormState>(key: K, value: BusFormState[K]) =>
     setForm(prev => ({ ...prev, [key]: value }))
+
+  const setReturnField = <K extends keyof ReturnFormState>(key: K, value: ReturnFormState[K]) =>
+    setReturnForm(prev => ({ ...prev, [key]: value }))
 
   const toggleAmenity = (a: string) => {
     setForm(prev => ({
@@ -133,9 +203,92 @@ export default function BusOperatorBusesPage() {
     }))
   }
 
+  const isSleeper = SLEEPER_TYPES.includes(form.busType ?? '')
+
+  const isOvernightJourney = (depClock: string, arrClock: string): boolean => {
+    return depClock.length > 0 && arrClock.length > 0 && arrClock < depClock
+  }
+
+  const buildPayload = (f: BusFormState, isReturn = false): CreateBusRequest => {
+    const baseDate = f.scheduleType === 'OneTime' ? (f.travelDate ?? getScheduleBaseDate()) : getScheduleBaseDate()
+    const depClock = f.departureClock ?? '00:00'
+    const arrClock = f.arrivalClock ?? '00:00'
+
+    const ladiesSeats = f.ladiesSeatsRaw
+      ? f.ladiesSeatsRaw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
+      : []
+
+    return {
+      busNumber: (f.busNumber ?? '').trim().toUpperCase(),
+      origin: f.origin ?? '',
+      destination: f.destination ?? '',
+      departureTime: `${baseDate}T${depClock}`,
+      arrivalTime: buildDateTimeISO(baseDate, arrClock, depClock),
+      totalSeats: Number(f.totalSeats),
+      price: Number(f.price),
+      upperBerthPrice: isSleeper && f.upperBerthPrice ? Number(f.upperBerthPrice) : undefined,
+      busType: f.busType ?? 'AC Seater',
+      seatLayoutConfig: f.seatLayoutConfig ?? '2-2',
+      seatRows: Number(f.seatRows ?? 10),
+      ladiesSeats: ladiesSeats.length > 0 ? ladiesSeats : undefined,
+      amenities: f.amenitiesSelected.length > 0 ? f.amenitiesSelected : undefined,
+      driverName: f.driverName || undefined,
+      driverPhone: f.driverPhone || undefined,
+      driverLicense: f.driverLicense || undefined,
+      photoUrl: f.photoUrl || undefined,
+      scheduleType: f.scheduleType ?? 'OneTime',
+      daysOfWeek: f.scheduleType === 'Weekly' ? f.daysSelected : undefined,
+      boardingPoints: isReturn ? f.droppingPoints || undefined : f.boardingPoints || undefined,
+      droppingPoints: isReturn ? f.boardingPoints || undefined : f.droppingPoints || undefined,
+    }
+  }
+
+  const buildReturnPayload = (): CreateBusRequest => {
+    const rf = returnForm
+    const baseDate = form.scheduleType === 'OneTime'
+      ? (rf.travelDate ?? getScheduleBaseDate())
+      : getScheduleBaseDate()
+    const depClock = rf.departureClock ?? '00:00'
+    const arrClock = rf.arrivalClock ?? '00:00'
+
+    const ladiesSeats = form.ladiesSeatsRaw
+      ? form.ladiesSeatsRaw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
+      : []
+
+    return {
+      busNumber: rf.sameBusNumber
+        ? (form.busNumber ?? '').trim().toUpperCase()
+        : (rf.customBusNumber ?? '').trim().toUpperCase(),
+      origin: form.destination ?? '',
+      destination: form.origin ?? '',
+      departureTime: `${baseDate}T${depClock}`,
+      arrivalTime: buildDateTimeISO(baseDate, arrClock, depClock),
+      totalSeats: Number(form.totalSeats),
+      price: Number(form.price),
+      upperBerthPrice: isSleeper && form.upperBerthPrice ? Number(form.upperBerthPrice) : undefined,
+      busType: form.busType ?? 'AC Seater',
+      seatLayoutConfig: rf.sameSeatConfig ? (form.seatLayoutConfig ?? '2-2') : '2-2',
+      seatRows: rf.sameSeatConfig ? Number(form.seatRows ?? 10) : 10,
+      amenities: form.amenitiesSelected.length > 0 ? form.amenitiesSelected : undefined,
+      driverName: rf.sameDriver ? (form.driverName || undefined) : undefined,
+      driverPhone: rf.sameDriver ? (form.driverPhone || undefined) : undefined,
+      driverLicense: rf.sameDriver ? (form.driverLicense || undefined) : undefined,
+      photoUrl: form.photoUrl || undefined,
+      scheduleType: form.scheduleType ?? 'OneTime',
+      daysOfWeek: form.scheduleType === 'Weekly' ? form.daysSelected : undefined,
+      boardingPoints: form.droppingPoints || undefined,
+      droppingPoints: form.boardingPoints || undefined,
+      ladiesSeats: rf.sameSeatConfig && ladiesSeats.length > 0 ? ladiesSeats : undefined,
+    }
+  }
+
   const handleSave = async () => {
-    if (!form.busNumber || !form.origin || !form.destination || !form.travelDate || !form.departureClock || !form.arrivalClock || !form.totalSeats || !form.price) {
+    if (!form.busNumber || !form.origin || !form.destination || !form.departureClock || !form.arrivalClock || !form.totalSeats || !form.price) {
       setError('Please fill all required fields.')
+      return
+    }
+    if (form.scheduleType === 'OneTime' && !form.travelDate) {
+      setError('Travel date is required for one-time schedule.')
       return
     }
     if (form.origin?.toLowerCase() === form.destination?.toLowerCase()) {
@@ -146,34 +299,16 @@ export default function BusOperatorBusesPage() {
       setError('Select at least one day for weekly schedule.')
       return
     }
-
-    const ladiesSeats = form.ladiesSeatsRaw
-      ? form.ladiesSeatsRaw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
-      : []
-
-    const payload: CreateBusRequest = {
-      busNumber: form.busNumber.trim().toUpperCase(),
-      origin: form.origin.trim(),
-      destination: form.destination.trim(),
-      departureTime: combineDateAndTime(form.travelDate, form.departureClock),
-      arrivalTime: combineDateAndTime(form.travelDate, form.arrivalClock),
-      totalSeats: Number(form.totalSeats),
-      price: Number(form.price),
-      busType: form.busType ?? 'AC Seater',
-      seatLayoutConfig: form.seatLayoutConfig ?? '2-2',
-      seatRows: Number(form.seatRows ?? 10),
-      ladiesSeats: ladiesSeats.length > 0 ? ladiesSeats : undefined,
-      amenities: form.amenitiesSelected.length > 0 ? form.amenitiesSelected : undefined,
-      driverName: form.driverName || undefined,
-      driverPhone: form.driverPhone || undefined,
-      driverLicense: form.driverLicense || undefined,
-      photoUrl: form.photoUrl || undefined,
-      scheduleType: form.scheduleType ?? 'OneTime',
-      daysOfWeek: form.scheduleType === 'Weekly' ? form.daysSelected : undefined,
-      boardingPoints: form.boardingPoints || undefined,
-      droppingPoints: form.droppingPoints || undefined,
+    if (addReturnJourney && !returnForm.sameBusNumber && !returnForm.customBusNumber?.trim()) {
+      setError('Enter a bus number for the return journey.')
+      return
+    }
+    if (addReturnJourney && !returnForm.departureClock) {
+      setError('Enter departure time for the return journey.')
+      return
     }
 
+    const payload = buildPayload(form)
     setSaving(true)
     setError('')
     try {
@@ -186,8 +321,16 @@ export default function BusOperatorBusesPage() {
       } else {
         const added = await busOperatorService.addBus(payload)
         setBuses(bs => [added, ...bs])
+
+        // Create return journey if enabled
+        if (addReturnJourney) {
+          const returnPayload = buildReturnPayload()
+          const returnAdded = await busOperatorService.addBus(returnPayload)
+          setBuses(bs => [returnAdded, ...bs])
+        }
       }
       setShowForm(false)
+      setAddReturnJourney(false)
     } catch (err: any) {
       setError(err?.response?.data?.message ?? 'Failed to save bus.')
     } finally {
@@ -207,6 +350,9 @@ export default function BusOperatorBusesPage() {
 
   const inputCls = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500'
   const labelCls = 'block text-xs text-gray-500 mb-1'
+
+  const overnightWarning = form.departureClock && form.arrivalClock && isOvernightJourney(form.departureClock, form.arrivalClock)
+  const returnOvernightWarning = returnForm.departureClock && returnForm.arrivalClock && isOvernightJourney(returnForm.departureClock, returnForm.arrivalClock)
 
   return (
     <div className="p-8">
@@ -242,7 +388,13 @@ export default function BusOperatorBusesPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
             <div>
               <label className={labelCls}>Bus Number *</label>
-              <input type="text" placeholder="e.g. KA01AB1234" value={form.busNumber ?? ''} onChange={e => setField('busNumber', e.target.value.toUpperCase())} className={inputCls} />
+              <input
+                type="text"
+                placeholder="e.g. KA01AB1234"
+                value={form.busNumber ?? ''}
+                onChange={e => setField('busNumber', e.target.value.toUpperCase())}
+                className={inputCls}
+              />
             </div>
             <div>
               <label className={labelCls}>Bus Type</label>
@@ -250,36 +402,36 @@ export default function BusOperatorBusesPage() {
                 {BUS_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
-            <div>
-              <label className={labelCls}>Origin *</label>
-              <input type="text" placeholder="e.g. Bangalore" value={form.origin ?? ''} onChange={e => setField('origin', e.target.value)} className={inputCls} />
-            </div>
-            <div>
-              <label className={labelCls}>Destination *</label>
-              <input type="text" placeholder="e.g. Mumbai" value={form.destination ?? ''} onChange={e => setField('destination', e.target.value)} className={inputCls} />
-            </div>
-            <div>
-              <label className={labelCls}>Travel Date *</label>
-              <input type="date" value={form.travelDate ?? ''} onChange={e => setField('travelDate', e.target.value)} className={inputCls} />
-            </div>
-            <div>
-              <label className={labelCls}>Departure Time *</label>
-              <input type="time" value={form.departureClock ?? ''} onChange={e => setField('departureClock', e.target.value)} className={inputCls} />
-            </div>
-            <div>
-              <label className={labelCls}>Arrival Time *</label>
-              <input type="time" value={form.arrivalClock ?? ''} onChange={e => setField('arrivalClock', e.target.value)} className={inputCls} />
-            </div>
-            <div>
-              <label className={labelCls}>Price per Seat (₹) *</label>
-              <input type="number" placeholder="800" value={form.price ?? ''} onChange={e => setField('price', Number(e.target.value))} className={inputCls} />
-            </div>
+
+            <CitySearch
+              label="Origin *"
+              placeholder="Departure city"
+              value={form.origin ?? ''}
+              onChange={city => setField('origin', city)}
+              focusColor="green"
+            />
+            <CitySearch
+              label="Destination *"
+              placeholder="Arrival city"
+              value={form.destination ?? ''}
+              onChange={city => setField('destination', city)}
+              focusColor="green"
+            />
+
             <div>
               <label className={labelCls}>Schedule Type</label>
               <select value={form.scheduleType ?? 'OneTime'} onChange={e => setField('scheduleType', e.target.value)} className={inputCls}>
                 {SCHEDULE_TYPES.map(s => <option key={s} value={s}>{s === 'OneTime' ? 'One-Time' : s}</option>)}
               </select>
             </div>
+
+            {form.scheduleType === 'OneTime' && (
+              <div>
+                <label className={labelCls}>Travel Date *</label>
+                <input type="date" value={form.travelDate ?? ''} onChange={e => setField('travelDate', e.target.value)} className={inputCls} />
+              </div>
+            )}
+
             {form.scheduleType === 'Weekly' && (
               <div className="md:col-span-2">
                 <label className={labelCls}>Days of Operation</label>
@@ -301,31 +453,86 @@ export default function BusOperatorBusesPage() {
                 </div>
               </div>
             )}
+
+            <div>
+              <label className={labelCls}>Departure Time *</label>
+              <input type="time" value={form.departureClock ?? ''} onChange={e => setField('departureClock', e.target.value)} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Arrival Time *</label>
+              <input type="time" value={form.arrivalClock ?? ''} onChange={e => setField('arrivalClock', e.target.value)} className={inputCls} />
+              {overnightWarning && (
+                <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                  🌙 Overnight journey — arrives next day
+                </p>
+              )}
+            </div>
           </div>
 
-          {/* Section 2: Seat Layout */}
+          {/* Section 2: Seat Configuration */}
           <p className="text-xs font-semibold text-green-700 uppercase tracking-wider mb-3">Seat Configuration</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
             <div>
               <label className={labelCls}>Total Seats</label>
-              <input type="number" placeholder="40" min={1} max={60} value={form.totalSeats ?? ''} onChange={e => setField('totalSeats', Number(e.target.value))} className={inputCls} />
+              <input
+                type="number"
+                placeholder="40"
+                min={1}
+                max={60}
+                value={form.totalSeats ?? ''}
+                onChange={e => setField('totalSeats', Number(e.target.value))}
+                className={inputCls}
+              />
             </div>
             <div>
               <label className={labelCls}>Seat Layout</label>
-              <select value={form.seatLayoutConfig ?? '2-2'} onChange={e => setField('seatLayoutConfig', e.target.value)} className={inputCls}>
+              <select
+                value={form.seatLayoutConfig ?? '2-2'}
+                onChange={e => setField('seatLayoutConfig', e.target.value)}
+                className={inputCls}
+              >
                 {LAYOUT_PRESETS.map(p => (
-                  <option key={p} value={p}>{p} — {p.split('-').join(' | ')}</option>
+                  <option key={p} value={p}>{p} — {p.split('-').join(' | ')} per row</option>
                 ))}
                 <option value="custom">Custom</option>
               </select>
               {form.seatLayoutConfig === 'custom' && (
-                <input type="text" placeholder="e.g. 2-2 or 2-1" className={`mt-2 ${inputCls}`} onChange={e => setField('seatLayoutConfig', e.target.value)} />
+                <input
+                  type="text"
+                  placeholder="e.g. 2-1"
+                  className={`mt-2 ${inputCls}`}
+                  onChange={e => setField('seatLayoutConfig', e.target.value)}
+                />
               )}
             </div>
             <div>
-              <label className={labelCls}>Seat Rows</label>
-              <input type="number" placeholder="10" min={1} max={30} value={form.seatRows ?? 10} onChange={e => setField('seatRows', Number(e.target.value))} className={inputCls} />
+              <label className={labelCls}>Seat Rows <span className="text-green-600">(auto-calculated)</span></label>
+              <input
+                type="number"
+                placeholder="10"
+                min={1}
+                max={30}
+                value={form.seatRows ?? 10}
+                onChange={e => setField('seatRows', Number(e.target.value))}
+                className={inputCls}
+              />
+              {form.totalSeats && form.seatLayoutConfig && form.seatLayoutConfig !== 'custom' && (
+                <p className="text-xs text-gray-400 mt-1">
+                  {form.totalSeats} seats ÷ {layoutSeatsPerRow(form.seatLayoutConfig ?? '2-2')} per row = {autoRows(Number(form.totalSeats), form.seatLayoutConfig ?? '2-2')} rows
+                </p>
+              )}
             </div>
+            <div>
+              <label className={labelCls}>Lower Berth / Standard Price (₹) *</label>
+              <input type="number" placeholder="800" value={form.price ?? ''} onChange={e => setField('price', Number(e.target.value))} className={inputCls} />
+            </div>
+            {isSleeper && (
+              <div>
+                <label className={labelCls}>Upper Berth Price (₹) <span className="text-gray-400">optional</span></label>
+                <input type="number" placeholder="700" value={form.upperBerthPrice ?? ''} onChange={e => setField('upperBerthPrice', Number(e.target.value))} className={inputCls} />
+                <p className="text-xs text-gray-400 mt-1">Upper berths are typically priced lower than lower berths.</p>
+              </div>
+            )}
             <div>
               <label className={labelCls}>Ladies-Only Seats <span className="text-gray-400">(comma-separated, e.g. 1A, 1B)</span></label>
               <input type="text" placeholder="1A, 1B, 2A" value={form.ladiesSeatsRaw ?? ''} onChange={e => setField('ladiesSeatsRaw', e.target.value)} className={inputCls} />
@@ -392,11 +599,140 @@ export default function BusOperatorBusesPage() {
             </div>
           )}
 
+          {/* Section 5: Return Journey (only for Add, not Edit) */}
+          {!editBus && (
+            <div className="border-t border-gray-100 pt-5 mb-5">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="addReturn"
+                    checked={addReturnJourney}
+                    onChange={e => {
+                      setAddReturnJourney(e.target.checked)
+                      if (e.target.checked) setShowReturnSection(true)
+                    }}
+                    className="w-4 h-4 accent-green-600"
+                  />
+                  <label htmlFor="addReturn" className="flex items-center gap-2 text-sm font-semibold text-gray-700 cursor-pointer">
+                    <RotateCcw className="w-4 h-4 text-green-600" />
+                    Add Return Journey
+                    <span className="text-xs font-normal text-gray-400">
+                      ({form.destination || 'Destination'} → {form.origin || 'Origin'})
+                    </span>
+                  </label>
+                </div>
+                {addReturnJourney && (
+                  <button type="button" onClick={() => setShowReturnSection(v => !v)} className="text-gray-400 hover:text-gray-600">
+                    {showReturnSection ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                )}
+              </div>
+
+              {addReturnJourney && showReturnSection && (
+                <div className="bg-green-50 rounded-xl p-4 space-y-4">
+                  <p className="text-xs font-semibold text-green-700 uppercase tracking-wider">Return Journey Details</p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {form.scheduleType === 'OneTime' && (
+                      <div>
+                        <label className={labelCls}>Return Travel Date</label>
+                        <input
+                          type="date"
+                          value={returnForm.travelDate ?? ''}
+                          onChange={e => setReturnField('travelDate', e.target.value)}
+                          className={inputCls}
+                        />
+                      </div>
+                    )}
+                    <div>
+                      <label className={labelCls}>Return Departure Time *</label>
+                      <input
+                        type="time"
+                        value={returnForm.departureClock ?? ''}
+                        onChange={e => setReturnField('departureClock', e.target.value)}
+                        className={inputCls}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Return Arrival Time</label>
+                      <input
+                        type="time"
+                        value={returnForm.arrivalClock ?? ''}
+                        onChange={e => setReturnField('arrivalClock', e.target.value)}
+                        className={inputCls}
+                      />
+                      {returnOvernightWarning && (
+                        <p className="text-xs text-amber-600 mt-1">🌙 Overnight journey — arrives next day</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-4">
+                    <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={returnForm.sameSeatConfig}
+                        onChange={e => setReturnField('sameSeatConfig', e.target.checked)}
+                        className="w-4 h-4 accent-green-600"
+                      />
+                      Same seat configuration
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={returnForm.sameDriver}
+                        onChange={e => setReturnField('sameDriver', e.target.checked)}
+                        className="w-4 h-4 accent-green-600"
+                      />
+                      Same driver details
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={returnForm.sameBusNumber}
+                        onChange={e => setReturnField('sameBusNumber', e.target.checked)}
+                        className="w-4 h-4 accent-green-600"
+                      />
+                      Same bus number
+                    </label>
+                  </div>
+
+                  {!returnForm.sameBusNumber && (
+                    <div>
+                      <label className={labelCls}>Return Bus Number *</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. KA01AB5678"
+                        value={returnForm.customBusNumber ?? ''}
+                        onChange={e => setReturnField('customBusNumber', e.target.value.toUpperCase())}
+                        className={inputCls}
+                      />
+                    </div>
+                  )}
+
+                  <p className="text-xs text-green-600">
+                    Route: <strong>{form.destination || 'Destination'}</strong> → <strong>{form.origin || 'Origin'}</strong>
+                    {form.droppingPoints ? ` · Boarding: ${form.droppingPoints}` : ''}
+                    {form.boardingPoints ? ` · Dropping: ${form.boardingPoints}` : ''}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex gap-3">
-            <button onClick={handleSave} disabled={saving} className="bg-green-700 text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-green-800 disabled:opacity-50 transition">
-              {saving ? 'Saving...' : 'Save'}
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="bg-green-700 text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-green-800 disabled:opacity-50 transition"
+            >
+              {saving ? 'Saving...' : addReturnJourney ? 'Save Both Journeys' : 'Save'}
             </button>
-            <button onClick={() => setShowForm(false)} className="border border-gray-200 text-gray-600 px-5 py-2 rounded-lg text-sm font-semibold hover:bg-gray-50 transition">
+            <button
+              onClick={() => { setShowForm(false); setAddReturnJourney(false) }}
+              className="border border-gray-200 text-gray-600 px-5 py-2 rounded-lg text-sm font-semibold hover:bg-gray-50 transition"
+            >
               Cancel
             </button>
           </div>
@@ -443,7 +779,10 @@ export default function BusOperatorBusesPage() {
                     &nbsp;·&nbsp;{formatDuration(b.durationMinutes)}
                     &nbsp;·&nbsp;{b.availableSeats}/{b.totalSeats} seats
                   </div>
-                  <div className="text-sm font-medium text-green-700 mt-0.5">₹{b.price.toLocaleString('en-IN')} per seat</div>
+                  <div className="text-sm font-medium text-green-700 mt-0.5">
+                    ₹{b.price.toLocaleString('en-IN')} lower
+                    {b.upperBerthPrice ? ` / ₹${b.upperBerthPrice.toLocaleString('en-IN')} upper` : ''}
+                  </div>
                   {b.amenities.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1.5">
                       {b.amenities.slice(0, 5).map(a => (
