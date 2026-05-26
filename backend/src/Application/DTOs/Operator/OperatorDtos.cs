@@ -231,6 +231,7 @@ public record CreateBusRequest(
     DateTime ArrivalTime,
     int TotalSeats,
     decimal Price,
+    decimal? UpperBerthPrice,
     string BusType,
     string SeatLayoutConfig,
     int SeatRows,
@@ -254,6 +255,7 @@ public record UpdateBusRequest(
     DateTime? ArrivalTime,
     int? TotalSeats,
     decimal? Price,
+    decimal? UpperBerthPrice,
     string? BusType,
     string? SeatLayoutConfig,
     int? SeatRows,
@@ -281,6 +283,7 @@ public record OperatorBusDto(
     int TotalSeats,
     int AvailableSeats,
     decimal Price,
+    decimal? UpperBerthPrice,
     string BusType,
     string SeatLayoutConfig,
     int SeatRows,
@@ -319,7 +322,9 @@ public record BusSeatLayoutDto(
     int SeatRows,
     List<string> LadiesSeats,
     List<SeatDto> Seats,
-    int UnassignedPassengers = 0
+    int UnassignedPassengers = 0,
+    string BusType = "AC Seater",
+    decimal? UpperBerthPrice = null
 );
 
 public record BusSeatLayoutConfigRequest(

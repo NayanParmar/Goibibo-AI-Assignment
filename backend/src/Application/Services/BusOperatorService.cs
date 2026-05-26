@@ -82,31 +82,32 @@ public class BusOperatorService : IBusOperatorService
         var duration = (int)(req.ArrivalTime - req.DepartureTime).TotalMinutes;
         var bus = new Bus
         {
-            Id             = Guid.NewGuid(),
-            BusNumber      = req.BusNumber.Trim().ToUpper(),
-            BusCompanyId   = companyId,
-            Origin         = req.Origin.Trim(),
-            Destination    = req.Destination.Trim(),
-            DepartureTime  = req.DepartureTime,
-            ArrivalTime    = req.ArrivalTime,
+            Id              = Guid.NewGuid(),
+            BusNumber       = req.BusNumber.Trim().ToUpper(),
+            BusCompanyId    = companyId,
+            Origin          = req.Origin.Trim(),
+            Destination     = req.Destination.Trim(),
+            DepartureTime   = req.DepartureTime,
+            ArrivalTime     = req.ArrivalTime,
             DurationMinutes = duration,
-            TotalSeats     = req.TotalSeats,
-            AvailableSeats = req.TotalSeats,
-            Price          = req.Price,
-            BusType        = req.BusType,
+            TotalSeats      = req.TotalSeats,
+            AvailableSeats  = req.TotalSeats,
+            Price           = req.Price,
+            UpperBerthPrice = req.UpperBerthPrice,
+            BusType         = req.BusType,
             SeatLayoutConfig = req.SeatLayoutConfig,
-            SeatRows       = req.SeatRows > 0 ? req.SeatRows : 10,
-            LadiesSeats    = SerializeList(req.LadiesSeats),
-            Amenities      = SerializeList(req.Amenities),
-            DriverName     = req.DriverName,
-            DriverPhone    = req.DriverPhone,
-            DriverLicense  = req.DriverLicense,
-            PhotoUrl       = req.PhotoUrl,
-            ScheduleType   = req.ScheduleType,
-            DaysOfWeek     = SerializeList(req.DaysOfWeek),
-            BoardingPoints = req.BoardingPoints,
-            DroppingPoints = req.DroppingPoints,
-            IsActive       = true,
+            SeatRows        = req.SeatRows > 0 ? req.SeatRows : 10,
+            LadiesSeats     = SerializeList(req.LadiesSeats),
+            Amenities       = SerializeList(req.Amenities),
+            DriverName      = req.DriverName,
+            DriverPhone     = req.DriverPhone,
+            DriverLicense   = req.DriverLicense,
+            PhotoUrl        = req.PhotoUrl,
+            ScheduleType    = req.ScheduleType,
+            DaysOfWeek      = SerializeList(req.DaysOfWeek),
+            BoardingPoints  = req.BoardingPoints,
+            DroppingPoints  = req.DroppingPoints,
+            IsActive        = true,
         };
 
         await _buses.AddAsync(bus, ct);
@@ -122,14 +123,15 @@ public class BusOperatorService : IBusOperatorService
         if (bus.BusCompanyId != companyId)
             throw new BusinessException("You do not own this bus.");
 
-        if (req.BusNumber      != null) bus.BusNumber      = req.BusNumber.Trim().ToUpper();
-        if (req.Origin         != null) bus.Origin         = req.Origin.Trim();
-        if (req.Destination    != null) bus.Destination    = req.Destination.Trim();
-        if (req.DepartureTime  != null) bus.DepartureTime  = req.DepartureTime.Value;
-        if (req.ArrivalTime    != null) bus.ArrivalTime    = req.ArrivalTime.Value;
-        if (req.TotalSeats     != null) bus.TotalSeats     = req.TotalSeats.Value;
-        if (req.Price          != null) bus.Price          = req.Price.Value;
-        if (req.BusType        != null) bus.BusType        = req.BusType;
+        if (req.BusNumber       != null) bus.BusNumber       = req.BusNumber.Trim().ToUpper();
+        if (req.Origin          != null) bus.Origin          = req.Origin.Trim();
+        if (req.Destination     != null) bus.Destination     = req.Destination.Trim();
+        if (req.DepartureTime   != null) bus.DepartureTime   = req.DepartureTime.Value;
+        if (req.ArrivalTime     != null) bus.ArrivalTime     = req.ArrivalTime.Value;
+        if (req.TotalSeats      != null) bus.TotalSeats      = req.TotalSeats.Value;
+        if (req.Price           != null) bus.Price           = req.Price.Value;
+        if (req.UpperBerthPrice != null) bus.UpperBerthPrice = req.UpperBerthPrice;
+        if (req.BusType         != null) bus.BusType         = req.BusType;
         if (req.SeatLayoutConfig != null) bus.SeatLayoutConfig = req.SeatLayoutConfig;
         if (req.SeatRows       != null) bus.SeatRows       = req.SeatRows.Value;
         if (req.LadiesSeats    != null) bus.LadiesSeats    = SerializeList(req.LadiesSeats);
@@ -271,7 +273,8 @@ public class BusOperatorService : IBusOperatorService
 
         return new BusSeatLayoutDto(
             busId, bus.BusNumber, bus.Origin, bus.Destination,
-            bus.DepartureTime, layoutConfig, rows, ladiesSeats, allSeats, unassignedPassengers);
+            bus.DepartureTime, layoutConfig, rows, ladiesSeats, allSeats,
+            unassignedPassengers, bus.BusType, bus.UpperBerthPrice);
     }
 
     public async Task<OperatorBusDto> UpdateSeatLayoutAsync(Guid companyId, Guid busId, BusSeatLayoutConfigRequest req, CancellationToken ct = default)
@@ -426,7 +429,7 @@ public class BusOperatorService : IBusOperatorService
     private static OperatorBusDto ToBusDto(Bus b) => new(
         b.Id, b.BusNumber, b.Origin, b.Destination,
         b.DepartureTime, b.ArrivalTime, b.DurationMinutes,
-        b.TotalSeats, b.AvailableSeats, b.Price, b.BusType,
+        b.TotalSeats, b.AvailableSeats, b.Price, b.UpperBerthPrice, b.BusType,
         b.SeatLayoutConfig, b.SeatRows > 0 ? b.SeatRows : 10,
         DeserializeList(b.LadiesSeats),
         DeserializeList(b.Amenities),

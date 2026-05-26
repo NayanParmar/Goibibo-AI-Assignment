@@ -13,6 +13,10 @@ function parseSections(config: string): number[] {
   return config.split('-').map(Number)
 }
 
+function isBerthLayout(busType: string): boolean {
+  return busType.toLowerCase().includes('sleeper')
+}
+
 function seatLetter(colIdx: number): string {
   return String.fromCharCode(65 + colIdx)
 }
@@ -161,65 +165,108 @@ export function BusSeatMapModal({ onClose }: Props) {
     return 'bg-gray-100 text-gray-700 border border-gray-200 cursor-pointer hover:bg-green-100 hover:border-green-400'
   }
 
+  const renderSeatRow = (row: number, sections: number[], seatMap: Map<string, SeatDto>) => {
+    let letterIdx = 0
+    return (
+      <div key={row} className="flex items-center gap-1">
+        <span className="w-7 text-right text-xs text-gray-400 mr-1 shrink-0">{row}</span>
+        {sections.map((count, si) => (
+          <div key={si} className="flex gap-1">
+            {Array.from({ length: count }, () => {
+              const letter = seatLetter(letterIdx)
+              letterIdx++
+              const seatId = `${row}${letter}`
+              const seat = seatMap.get(seatId) ?? {
+                seatNumber: seatId, isBooked: false, isLadiesOnly: false,
+              } as SeatDto
+              const isSelected = selected.includes(seatId)
+              return (
+                <button
+                  key={seatId}
+                  title={seat.isBooked ? `${seat.passengerName} — ${seat.bookingRef}` : seat.isLadiesOnly ? 'Ladies only' : seatId}
+                  onClick={e => handleSeatClick(e, seat)}
+                  className={`w-9 h-8 rounded text-xs font-semibold transition-all ${getSeatColor(seat, isSelected)}`}
+                >
+                  {isSelected ? '✓' : ''}
+                </button>
+              )
+            })}
+            {si < sections.length - 1 && <div className="w-5" />}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  const renderColumnHeaders = (sections: number[]) => (
+    <div className="flex items-center gap-1 mb-2 pl-8">
+      {sections.map((count, si) => (
+        <div key={si} className="flex gap-1">
+          {Array.from({ length: count }, (_, ci) => {
+            const letterIdx = sections.slice(0, si).reduce((a, b) => a + b, 0) + ci
+            return (
+              <div key={ci} className="w-9 text-center text-xs font-bold text-gray-400">
+                {seatLetter(letterIdx)}
+              </div>
+            )
+          })}
+          {si < sections.length - 1 && <div className="w-5" />}
+        </div>
+      ))}
+    </div>
+  )
+
   const renderSeatMap = () => {
     if (!layout) return null
     const config = layout.layoutConfig || '2-2'
     const sections = parseSections(config)
     const seatMap = new Map(layout.seats.map(s => [s.seatNumber, s]))
+    const isSleeper = isBerthLayout(layout.busType || '')
+    const totalRows = layout.seatRows
+    const lowerRows = isSleeper ? Math.ceil(totalRows / 2) : totalRows
+    const upperRows = isSleeper ? totalRows - lowerRows : 0
 
     return (
-      <div className="overflow-auto max-h-[420px] pr-2">
-        <div className="flex items-center gap-1 mb-2 pl-8">
-          {sections.map((count, si) => (
-            <div key={si} className="flex gap-1">
-              {Array.from({ length: count }, (_, ci) => {
-                const letterIdx = sections.slice(0, si).reduce((a, b) => a + b, 0) + ci
-                return (
-                  <div key={ci} className="w-9 text-center text-xs font-bold text-gray-400">
-                    {seatLetter(letterIdx)}
-                  </div>
-                )
-              })}
-              {si < sections.length - 1 && <div className="w-5" />}
-            </div>
-          ))}
-        </div>
+      <div className="overflow-auto max-h-[480px] pr-2">
+        {renderColumnHeaders(sections)}
 
-        <div className="space-y-1">
-          {Array.from({ length: layout.seatRows }, (_, ri) => {
-            const row = ri + 1
-            let letterIdx = 0
-            return (
-              <div key={row} className="flex items-center gap-1">
-                <span className="w-7 text-right text-xs text-gray-400 mr-1 shrink-0">{row}</span>
-                {sections.map((count, si) => (
-                  <div key={si} className="flex gap-1">
-                    {Array.from({ length: count }, () => {
-                      const letter = seatLetter(letterIdx)
-                      letterIdx++
-                      const seatId = `${row}${letter}`
-                      const seat = seatMap.get(seatId) ?? {
-                        seatNumber: seatId, isBooked: false, isLadiesOnly: false,
-                      } as SeatDto
-                      const isSelected = selected.includes(seatId)
-                      return (
-                        <button
-                          key={seatId}
-                          title={seat.isBooked ? `${seat.passengerName} — ${seat.bookingRef}` : seat.isLadiesOnly ? 'Ladies only' : seatId}
-                          onClick={e => handleSeatClick(e, seat)}
-                          className={`w-9 h-8 rounded text-xs font-semibold transition-all ${getSeatColor(seat, isSelected)}`}
-                        >
-                          {isSelected ? '✓' : ''}
-                        </button>
-                      )
-                    })}
-                    {si < sections.length - 1 && <div className="w-5" />}
-                  </div>
-                ))}
+        {isSleeper ? (
+          <>
+            {/* Lower Berth */}
+            <div className="mb-1">
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-xs font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded">Lower Berth</span>
+                {layout.upperBerthPrice && (
+                  <span className="text-xs text-gray-400">₹{layout.upperBerthPrice?.toLocaleString('en-IN')}</span>
+                )}
               </div>
-            )
-          })}
-        </div>
+              <div className="space-y-1">
+                {Array.from({ length: lowerRows }, (_, ri) => renderSeatRow(ri + 1, sections, seatMap))}
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div className="flex items-center gap-2 my-3">
+              <div className="flex-1 border-t-2 border-dashed border-gray-200" />
+              <span className="text-xs text-gray-400 font-medium">Upper Deck</span>
+              <div className="flex-1 border-t-2 border-dashed border-gray-200" />
+            </div>
+
+            {/* Upper Berth */}
+            <div>
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">Upper Berth</span>
+              </div>
+              <div className="space-y-1">
+                {Array.from({ length: upperRows }, (_, ri) => renderSeatRow(lowerRows + ri + 1, sections, seatMap))}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="space-y-1">
+            {Array.from({ length: totalRows }, (_, ri) => renderSeatRow(ri + 1, sections, seatMap))}
+          </div>
+        )}
       </div>
     )
   }
@@ -329,6 +376,16 @@ export function BusSeatMapModal({ onClose }: Props) {
                     </div>
                   ))}
                 </div>
+
+                {layout && isBerthLayout(layout.busType || '') && (
+                  <div className="flex items-center gap-3 text-xs mb-2">
+                    <span className="bg-green-50 text-green-700 px-2 py-0.5 rounded font-medium border border-green-200">Lower Berth</span>
+                    <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-medium border border-blue-200">Upper Berth</span>
+                    {layout.upperBerthPrice && (
+                      <span className="text-gray-500">Upper: ₹{layout.upperBerthPrice.toLocaleString('en-IN')}</span>
+                    )}
+                  </div>
+                )}
 
                 {layout && layout.unassignedPassengers > 0 && (
                   <div className="flex items-start gap-2 text-xs bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
